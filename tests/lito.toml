@@ -1,0 +1,14 @@
+[package]
+name = "dbusto-tests"
+
+[[test]]
+name = "dbusto-tests"
+sources = ["main.cpp", "wire.cpp", "bus.cpp", "binding.cpp", "counter.cppm"]
+link-stdlib = false
+
+[dependencies]
+dbusto = { path = "../dbusto" }
+rstd-std = "0.1.9"
+rstd-test = "0.1.9"
+rstd-nostd = { version = "0.1.9", usage = "link" }
+dbusto-macros = "0.1.0"

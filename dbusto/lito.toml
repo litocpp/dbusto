@@ -1,0 +1,13 @@
+[package]
+name = "dbusto"
+version.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[lib]
+name = "dbusto"
+module = "dbusto"
+archive = "dbusto"
+
+[dependencies]
+rstd-std = { version = "0.1.9", pub = true }

@@ -1,0 +1,6 @@
+/.lito/
+/build/
+/tests/.lito/
+lito.lock
+AGENTS.md
+.vscode/

@@ -1,0 +1,12 @@
+[workspace]
+name = "dbusto"
+members = ["dbusto", "macros"]
+
+[workspace.package]
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+authors = ["hypengw <hypengwip@gmail.com>"]
+
+[profile.base]
+exceptions = false
+rtti = false
