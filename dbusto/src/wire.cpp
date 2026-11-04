@@ -57,7 +57,7 @@ auto Error::clone() const -> Error {
             return Unsupported(feature.clone());
         }
         RSTD_CASE(Io, source) {
-            return Io(source);
+            return Io(source.clone());
         }
         RSTD_CASE(Authentication) {
             return Authentication();

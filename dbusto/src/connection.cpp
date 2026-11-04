@@ -126,9 +126,9 @@ struct ConnectionState {
     using Closing =
         decltype(async::into_future(rstd::move(rstd::declval<rstd::net::UnixStream&>()).close()));
     struct CloseState {
-        Option<Closing>         future;
-        bool                    done {};
-        Option<rstd::io::Error> error;
+        Option<Closing>              future;
+        bool                         done {};
+        Option<Arc<rstd::io::Error>> error;
     };
     async::Mutex<CloseState> closing { CloseState {} };
     ConnectionState(ConnectionOptions     options,
@@ -203,11 +203,12 @@ auto close_state(Arc<ConnectionState> state) -> async::coro<Result<empty>> {
     }
     if (closing->future.is_some()) {
         auto result = co_await rstd::future::by_ref(*closing->future);
-        if (result.is_err()) closing->error = Some(rstd::move(result).unwrap_err());
+        if (result.is_err())
+            closing->error = Some(Arc<rstd::io::Error>::make(rstd::move(result).unwrap_err()));
         closing->future = None();
         closing->done   = true;
     }
-    if (closing->error.is_some()) co_return Err(Error::Io(*closing->error));
+    if (closing->error.is_some()) co_return Err(Error::Io(closing->error->clone()));
     co_return Ok(empty {});
 }
 

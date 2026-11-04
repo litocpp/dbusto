@@ -5,6 +5,23 @@ import dbusto;
 using namespace rstd::prelude;
 using namespace rstd::literals;
 using namespace dbusto;
+TEST(DBusError, ClonesKeepTheOwnedIoPayloadAlive) {
+    Option<dbusto::Error> retained;
+    {
+        auto source = rstd::io::Error::with_source(
+            rstd::io::ErrorKind { rstd::io::ErrorKind::Other },
+            Box<rstd::dyn<rstd::error::Error>>::make(rstd::io::Error::from_raw_os_error(i32(111))));
+        auto error = dbusto::Error::Io(rstd::move(source));
+        retained   = Some(error.clone());
+    }
+    ASSERT_TRUE(retained->is_Io());
+    const auto& source = *retained->as_Io().source;
+    EXPECT_EQ(source.kind(), rstd::io::ErrorKind { rstd::io::ErrorKind::Other });
+    ASSERT_TRUE(source.get_ref().is_some());
+    auto native = rstd::error::downcast_ref<rstd::io::Error>(*source.get_ref());
+    ASSERT_TRUE(native.is_some());
+    EXPECT_EQ((*native)->raw_os_error(), Some(i32(111)));
+}
 TEST(DBusSignature, NestedTypesAndInvalidGrammar) {
     EXPECT_TRUE(Signature::parse("ia(iayqs)a{sv}(st)v"_str).is_ok());
     EXPECT_TRUE(Signature::parse(""_str).is_ok());

@@ -13,13 +13,16 @@ class Error {
               (InvalidMessage, (usize offset {}; String reason = String::make();)),
               (LimitExceeded),
               (Unsupported, (String feature = String::make();)),
-              (Io, (rstd::io::Error source;)),
+              (Io, (rstd::sync::Arc<rstd::io::Error> source;)),
               (Authentication),
               (Closed),
               (Busy),
               (TimedOut),
               (Remote, (String name; String text;)))
 public:
+    static auto Io(rstd::io::Error source) -> Error {
+        return Io(rstd::sync::Arc<rstd::io::Error>::make(rstd::move(source)));
+    }
     auto message() const -> ref<str>;
     auto clone() const -> Error;
 };

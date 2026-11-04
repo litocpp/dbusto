@@ -10,4 +10,4 @@ module = "dbusto"
 archive = "dbusto"
 
 [dependencies]
-rstd-std = { version = "0.1.9", pub = true }
+rstd-std = { version = "0.1.11", pub = true }
