@@ -467,7 +467,7 @@ auto bus_call(ref<str> method, Body body = Body::make()) -> Message {
                        method,
                        rstd::move(body));
 }
-auto name_owned(Connection connection, String name) -> async::coro<Result<empty>> {
+auto claim_name_owned(Connection connection, String name) -> async::coro<Result<NameClaim>> {
     if (! valid_bus_name(name.as_str()))
         co_return Err(
             Error::InvalidMessage(usize(), String::make("invalid requested bus name"_str)));
@@ -480,7 +480,18 @@ auto name_owned(Connection connection, String name) -> async::coro<Result<empty>
         co_return Err(
             Error::InvalidMessage(usize(), String::make("invalid RequestName reply"_str)));
     auto status = result->body[usize()].as_UInt32().value;
-    if (status != u32(1) && status != u32(4)) co_return Err(Error::Busy());
+    if (status == u32(1)) co_return Ok(NameClaim::PrimaryOwner);
+    if (status == u32(3)) co_return Ok(NameClaim::Exists);
+    if (status == u32(4)) co_return Ok(NameClaim::AlreadyOwner);
+    co_return Err(Error::InvalidMessage(usize(), String::make("invalid RequestName status"_str)));
+}
+auto Connection::claim_name(ref<str> name) const -> async::coro<Result<NameClaim>> {
+    return claim_name_owned(clone(), String::make(name));
+}
+auto name_owned(Connection connection, String name) -> async::coro<Result<empty>> {
+    auto claim = co_await connection.claim_name(name.as_str());
+    if (claim.is_err()) co_return Err(rstd::move(claim).unwrap_err());
+    if (*claim == NameClaim::Exists) co_return Err(Error::Busy());
     co_return Ok(empty {});
 }
 auto Connection::request_name(ref<str> name) const -> async::coro<Result<empty>> {

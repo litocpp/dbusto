@@ -17,6 +17,12 @@ struct ConnectionOptions {
     rstd::time::Duration call_timeout  = rstd::time::Duration::from_secs(u64(25));
 };
 struct ConnectionState;
+enum class NameClaim
+{
+    PrimaryOwner,
+    AlreadyOwner,
+    Exists
+};
 class Connection {
     rstd::sync::Arc<ConnectionState> state_;
 
@@ -33,6 +39,8 @@ public:
     /// One consumer receives incoming method calls and signals.
     auto next() const -> rstd::async::coro<Result<Message>>;
     auto close() const -> rstd::async::coro<Result<empty>>;
+    // Atomically claim with DO_NOT_QUEUE, without allowing or requesting replacement.
+    auto claim_name(ref<str> name) const -> rstd::async::coro<Result<NameClaim>>;
     auto request_name(ref<str> name) const -> rstd::async::coro<Result<empty>>;
     auto add_match(ref<str> rule) const -> rstd::async::coro<Result<empty>>;
     auto peer_uid(ref<str> unique_name) const -> rstd::async::coro<Result<u32>>;

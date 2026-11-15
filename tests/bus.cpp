@@ -1,3 +1,4 @@
+#include <rstd/macro.hpp>
 #include <rstd/test/gtest.hpp>
 import rstd;
 import dbusto;
@@ -99,6 +100,60 @@ TEST(DBusConnection, PrivateBusRoundtrip) {
     auto address = rstd::env::var("DBUSTO_TEST_BUS"_str);
     if (address.is_err()) GTEST_SKIP();
     auto result = async::block_on(bus_roundtrip(rstd::move(address).unwrap()));
+    if (result.is_err()) rstd::io::eprintln("{}", result.unwrap_err());
+    EXPECT_TRUE(result.is_ok());
+}
+auto claim_name_checks(dbusto::Connection owner, dbusto::Connection contender)
+    -> async::coro<dbusto::Result<empty>> {
+    auto name  = "org.example.DbustoClaim"_str;
+    auto first = rstd_co_try(co_await owner.claim_name(name));
+    EXPECT_EQ(first, dbusto::NameClaim::PrimaryOwner);
+    auto again = rstd_co_try(co_await owner.claim_name(name));
+    EXPECT_EQ(again, dbusto::NameClaim::AlreadyOwner);
+    auto second = rstd_co_try(co_await contender.claim_name(name));
+    EXPECT_EQ(second, dbusto::NameClaim::Exists);
+    auto legacy = co_await contender.request_name(name);
+    EXPECT_TRUE(legacy.is_err());
+    if (legacy.is_err()) EXPECT_TRUE(legacy.unwrap_err().is_Busy());
+    auto current =
+        rstd_co_try(co_await contender.call(dbusto::method_call("org.freedesktop.DBus"_str,
+                                                                "/org/freedesktop/DBus"_str,
+                                                                "org.freedesktop.DBus"_str,
+                                                                "GetNameOwner"_str,
+                                                                dbusto::pack(String::make(name)))));
+    auto actual = rstd_co_try(dbusto::unpack<String>(current.body));
+    EXPECT_EQ(actual.get<0>(), owner.unique_name());
+    rstd_co_try(co_await owner.close());
+    auto reclaimed = rstd_co_try(co_await contender.claim_name(name));
+    EXPECT_EQ(reclaimed, dbusto::NameClaim::PrimaryOwner);
+    co_return Ok(empty {});
+}
+auto private_name_claim(String address) -> async::coro<dbusto::Result<empty>> {
+    auto first        = rstd_co_try(co_await dbusto::connect(address.as_str()));
+    auto owner        = rstd::move(first.connection);
+    auto owner_driver = async::spawn(rstd::move(first.driver).run());
+    auto second       = co_await dbusto::connect(address.as_str());
+    if (second.is_err()) {
+        (void)co_await owner.close();
+        (void)co_await rstd::move(owner_driver);
+        co_return Err(rstd::move(second).unwrap_err());
+    }
+    auto contender        = rstd::move(second->connection);
+    auto contender_driver = async::spawn(rstd::move(second->driver).run());
+    auto checked          = co_await async::timeout(
+        async::into_future(claim_name_checks(owner.clone(), contender.clone())),
+        rstd::time::Duration::from_secs(u64(5)));
+    (void)co_await owner.close();
+    (void)co_await contender.close();
+    (void)co_await rstd::move(owner_driver);
+    (void)co_await rstd::move(contender_driver);
+    if (checked.is_err()) co_return Err(dbusto::Error::TimedOut());
+    co_return rstd::move(*checked);
+}
+TEST(DBusConnection, ClaimsDoNotReplaceOrQueue) {
+    auto address = rstd::env::var("DBUSTO_TEST_BUS"_str);
+    if (address.is_err()) GTEST_SKIP();
+    auto result = async::block_on(private_name_claim(rstd::move(*address)));
     if (result.is_err()) rstd::io::eprintln("{}", result.unwrap_err());
     EXPECT_TRUE(result.is_ok());
 }
