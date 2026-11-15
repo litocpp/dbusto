@@ -3,7 +3,7 @@ name = "dbusto-tests"
 
 [[test]]
 name = "dbusto-tests"
-sources = ["main.cpp", "wire.cpp", "bus.cpp", "binding.cpp", "counter.cppm"]
+sources = ["main.cpp", "wire.cpp", "bus.cpp", "binding.cpp", "object.cpp", "counter.cppm"]
 link-stdlib = false
 
 [dependencies]

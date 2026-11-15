@@ -24,3 +24,23 @@ TEST(DBusBinding, GeneratedDispatchAndIntrospection) {
     EXPECT_EQ(value.signature().as_str(), "a(is)"_str);
     EXPECT_TRUE((dbusto::Codec<Vec<rstd::tuple<i32, String>>>::decode(value).is_ok()));
 }
+TEST(DBusBinding, RejectsInvalidDescriptorsAndDuplicateDictionaryKeys) {
+    const rstd::array<dbusto::MethodSpec, 1> methods { dbusto::MethodSpec {
+        "Broken"_str, "("_str, ""_str } };
+    EXPECT_TRUE(
+        dbusto::validate({ "org.example.Invalid"_str, methods.as_slice(), {}, {} }).is_err());
+    const rstd::array<dbusto::PropertySpec, 1> properties { dbusto::PropertySpec { "Broken"_str,
+                                                                                   "ss"_str } };
+    EXPECT_TRUE(
+        dbusto::validate({ "org.example.Invalid"_str, {}, properties.as_slice(), {} }).is_err());
+    const rstd::array<dbusto::SignalSpec, 1> signals { dbusto::SignalSpec { "Broken"_str,
+                                                                            "a"_str } };
+    EXPECT_TRUE(
+        dbusto::validate({ "org.example.Invalid"_str, {}, {}, signals.as_slice() }).is_err());
+    auto entries = dbusto::Body::make();
+    for (unsigned i = 0; i < 2; ++i)
+        entries.push(dbusto::Value::Entry(
+            dbusto::pack(String::make("duplicate"_str), dbusto::Value::UInt32(u32(i)))));
+    auto dictionary = dbusto::Value::Array(String::make("{sv}"_str), rstd::move(entries));
+    EXPECT_TRUE(dbusto::Codec<dbusto::PropertyMap>::decode(dictionary).is_err());
+}

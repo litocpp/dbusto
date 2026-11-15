@@ -8,6 +8,7 @@ authors.workspace = true
 name = "dbusto"
 module = "dbusto"
 archive = "dbusto"
+sources = ["src/lib.cppm", "src/wire.cppm", "src/wire.cpp", "src/connection.cppm", "src/connection.cpp", "src/binding.cppm", "src/binding.cpp", "src/object.cpp"]
 
 [dependencies]
 rstd-std = { version = "0.1.11", pub = true }

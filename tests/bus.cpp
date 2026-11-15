@@ -102,6 +102,116 @@ TEST(DBusConnection, PrivateBusRoundtrip) {
     if (result.is_err()) rstd::io::eprintln("{}", result.unwrap_err());
     EXPECT_TRUE(result.is_ok());
 }
+auto binding_bus_checks(dbusto::Connection connection) -> async::coro<dbusto::Result<empty>> {
+    auto object = dbusto::Object::make("/test"_str).unwrap();
+    auto state  = rstd::sync::Arc<TestPlayerState>::make();
+    EXPECT_TRUE(object.add(TestPlayer { state.clone() }).is_ok());
+    EXPECT_TRUE(object.add(ReadOnly {}).is_ok());
+    auto name    = connection.unique_name();
+    auto request = [&](ref<str> member, dbusto::Body body) {
+        return dbusto::method_call(name.as_str(),
+                                   "/test"_str,
+                                   "org.freedesktop.DBus.Properties"_str,
+                                   member,
+                                   rstd::move(body));
+    };
+    for (unsigned i = 0; i < 4; ++i) {
+        auto call    = i == 0   ? request("Get"_str,
+                                          dbusto::pack(String::make(TestPlayer::dbus_interface()),
+                                                       String::make("Volume"_str)))
+                       : i == 1 ? request("Set"_str,
+                                          dbusto::pack(String::make(TestPlayer::dbus_interface()),
+                                                       String::make("Volume"_str),
+                                                       dbusto::Value::Floating(0.9)))
+                       : i == 2 ? request("Set"_str,
+                                          dbusto::pack(String::make(TestPlayer::dbus_interface()),
+                                                       String::make("Position"_str),
+                                                       dbusto::Value::Int64(i64(3))))
+                                : request("GetAll"_str,
+                                          dbusto::pack(String::make(TestPlayer::dbus_interface())));
+        auto pending = async::spawn(connection.call(rstd::move(call)));
+        for (;;) {
+            auto incoming = co_await connection.next();
+            if (incoming.is_err()) co_return Err(rstd::move(incoming).unwrap_err());
+            if (incoming->type != dbusto::MessageType::MethodCall) continue;
+            auto handled = co_await object.handle(connection.clone(), rstd::move(*incoming));
+            if (handled.is_err()) co_return handled;
+            break;
+        }
+        auto joined = co_await rstd::move(pending);
+        if (joined.is_err()) co_return Err(dbusto::Error::Closed());
+        auto response = rstd::move(*joined);
+        if (i == 2) {
+            EXPECT_TRUE(response.is_err());
+            if (response.is_err()) {
+                auto error = rstd::move(response).unwrap_err();
+                EXPECT_TRUE(error.is_Remote());
+                if (error.is_Remote())
+                    EXPECT_EQ(error.as_Remote().name.as_str(),
+                              "org.freedesktop.DBus.Error.PropertyReadOnly"_str);
+            }
+        } else {
+            if (response.is_err()) co_return Err(rstd::move(response).unwrap_err());
+            EXPECT_EQ(dbusto::body_signature(response->body).as_str(),
+                      i == 0   ? "v"_str
+                      : i == 1 ? ""_str
+                               : "a{sv}"_str);
+        }
+    }
+    EXPECT_EQ(state->volume, 0.9);
+    EXPECT_EQ(state->writes, 1);
+    auto matched = co_await connection.add_match("type='signal',path='/test'"_str);
+    if (matched.is_err()) co_return matched;
+    auto changed = dbusto::PropertyMap::make();
+    changed.insert(String::make("Volume"_str), dbusto::Value::Floating(state->volume));
+    auto notification =
+        object.properties_changed(TestPlayer::dbus_interface(), rstd::move(changed));
+    if (notification.is_err()) co_return Err(rstd::move(notification).unwrap_err());
+    auto sent = co_await connection.send(rstd::move(*notification));
+    if (sent.is_err()) co_return sent;
+    for (;;) {
+        auto incoming = co_await connection.next();
+        if (incoming.is_err()) co_return Err(rstd::move(incoming).unwrap_err());
+        if (incoming->member.as_str() != "PropertiesChanged"_str) continue;
+        EXPECT_EQ(dbusto::body_signature(incoming->body).as_str(), "sa{sv}as"_str);
+        EXPECT_EQ(incoming->body[usize()].as_Text().value.as_str(), TestPlayer::dbus_interface());
+        break;
+    }
+    auto emitter = dbusto::SignalEmitter::make(connection.clone(), "/test"_str).unwrap();
+    sent         = co_await emitter.emit(
+        TestPlayer::dbus_interface(), TestPlayer::seeked(), dbusto::pack(i64(1234)));
+    if (sent.is_err()) co_return sent;
+    for (;;) {
+        auto incoming = co_await connection.next();
+        if (incoming.is_err()) co_return Err(rstd::move(incoming).unwrap_err());
+        if (incoming->member.as_str() != "Seeked"_str) continue;
+        EXPECT_EQ(dbusto::body_signature(incoming->body).as_str(), "x"_str);
+        EXPECT_EQ(incoming->body[usize()].as_Int64().value, i64(1234));
+        break;
+    }
+    co_return Ok(empty {});
+}
+auto registered_bus_roundtrip(String address) -> async::coro<dbusto::Result<empty>> {
+    auto opened = co_await dbusto::connect(address.as_str());
+    if (opened.is_err()) co_return Err(rstd::move(opened).unwrap_err());
+    auto connection = rstd::move(opened->connection);
+    auto driver     = async::spawn(rstd::move(opened->driver).run());
+    auto checked =
+        co_await async::timeout(async::into_future(binding_bus_checks(connection.clone())),
+                                rstd::time::Duration::from_secs(u64(5)));
+    auto closed = co_await connection.close();
+    (void)co_await rstd::move(driver);
+    if (closed.is_err()) co_return closed;
+    if (checked.is_err()) co_return Err(dbusto::Error::TimedOut());
+    co_return rstd::move(*checked);
+}
+TEST(DBusConnection, RegisteredPropertiesAndSignals) {
+    auto address = rstd::env::var("DBUSTO_TEST_BUS"_str);
+    if (address.is_err()) GTEST_SKIP();
+    auto result = async::block_on(registered_bus_roundtrip(rstd::move(address).unwrap()));
+    if (result.is_err()) rstd::io::eprintln("{}", result.as_ref().unwrap_err());
+    EXPECT_TRUE(result.is_ok());
+}
 TEST(DBusAddress, UnixEscapesAndAlternatives) {
     auto parsed = dbusto::parse_addresses(
         "unix:path=/tmp/my%20bus,guid=0123456789abcdef0123456789abcdef;unix:abstract=dbusto"_str);
