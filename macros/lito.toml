@@ -1,5 +1,5 @@
 [package]
-name = "dbusto-macros"
+name = "dbusto-macro"
 version.workspace = true
 license.workspace = true
 authors.workspace = true

@@ -1,10 +1,5 @@
-module;
-#include <expected>
-#include <string>
-#include <string_view>
-#include <vector>
-#include <utility>
 export module dbusto.macros;
+import std;
 import pmacro;
 namespace
 {
@@ -43,7 +38,7 @@ auto render(pmacro::TokenStream stream) -> std::string {
         if (token.kind() == pmacro::TokenKind::Group) {
             auto owned = literals(token.children());
             if (token.delimiter() == pmacro::Delimiter::Bracket && ! owned.empty() &&
-                owned[0] == "\"dbusto-macros::interface\"")
+                owned[0] == "\"dbusto-macro::interface\"")
                 continue;
             auto delimiter = token.delimiter();
             char a         = delimiter == pmacro::Delimiter::Brace         ? '{'
@@ -117,7 +112,7 @@ auto interface(pmacro::AttributeInput input, pmacro::Context& context) noexcept
         if (token.kind() == pmacro::TokenKind::Group &&
             token.delimiter() == pmacro::Delimiter::Bracket) {
             auto texts = literals(token.children());
-            if (! texts.empty() && texts[0] == "\"dbusto-macros::interface\"") {
+            if (! texts.empty() && texts[0] == "\"dbusto-macro::interface\"") {
                 if (! pending.empty() || texts.size() < 2)
                     return fail("invalid dbusto member helper");
                 pending       = std::move(texts);

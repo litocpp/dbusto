@@ -8,7 +8,7 @@ link-stdlib = false
 
 [dependencies]
 dbusto = { path = "../dbusto" }
-rstd-std = "0.1.11"
-rstd-test = "0.1.11"
-rstd-nostd = { version = "0.1.11", usage = "link" }
-dbusto-macros = "0.1.0"
+rstd-std = "0.1.13"
+rstd-test = "0.1.13"
+rstd-nostd = { version = "0.1.13", usage = "link" }
+dbusto-macro = "0.1.0"
